@@ -11,6 +11,7 @@ function Invoke-Compiler {
         [String[]]$Options,
         [Parameter(Mandatory=$False, HelpMessage="Output file")]
         [String]$OutputFile,
+        [Switch]$OverwriteJson,
         [Switch]$Help,
         [Switch]$H
     )
@@ -44,19 +45,37 @@ function Invoke-Compiler {
     # NORMALISE OPTION PREFIXES
     $NormalisedOptions = @()
     foreach($opt in $Options) {
-        $NormalisedOptions.Add($opt.Replace("-", "/"))
+        $NormalisedOptions += $opt.Replace("-", "/")
     }
 
-    # SUFFIX OUTFILE IS MISSING
-    if ( $OutputFile -and !$OutputFile.ToLower().Contains(".obj") -and !$OutputFile.ToLower().Contains(".exe") ) {
+    $CurrentDirectory = (Get-Location).Path
 
-        if ($NormalisedOptions.Contains("/c")) {
-            $OutputFile = "/Fo:" + $OutputFile + ".obj"
-        } else {
-            $OutputFile = "/Fe:" + $OutputFile + ".exe"
+    $PsEntries = @()
+
+    $InputFiles | ForEach-Object {
+        $PsEntries += @{
+            'directory' = "$CurrentDirectory"
+            'file' = Join-Path "$CurrentDirectory" "$_"
+            'output' = (Join-Path "$CurrentDirectory" "$_".Split(".")[0])+".obj"
+            'command' = "$Compiler $InputFiles $OutputFilePrefix$OutputFile $Options"
         }
     }
 
-    & "$Compiler" $InputFiles $OutputFile $Options
+    $PsEntries | ConvertTo-Json | out-file ".\compile_commands.json"
+
+    # SUFFIX OUTFILE IS MISSING
+    $OutputFilePrefix = $null
+    if ( $OutputFile -and !$OutputFile.ToLower().Contains(".obj") -and !$OutputFile.ToLower().Contains(".exe") ) {
+
+        if ($NormalisedOptions.Contains("/c")) {
+            $OutputFilePrefix = "/Fo:"
+            $OutputFile = $OutputFile + ".obj"
+        } else {
+            $OutputFilePrefix = "/Fe:"
+            $OutputFile = $OutputFile + ".exe"
+        }
+    }
+
+    & "$Compiler" $InputFiles $OutputFilePrefix$OutputFile $Options
 }
 set-alias -Name compile -Value Invoke-Compiler
